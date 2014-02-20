@@ -1,0 +1,77 @@
+#!/bin/sh
+
+# Default settings
+REMOTE_ROOT="$HOME/Google Drive/git"
+REMOTE_NAME="origin"
+
+USAGE="Usage: git init-local [-h] [-p PATH] [NAME]"
+
+# Parse command line options.
+while getopts hp: OPT; do
+    case "$OPT" in
+        h)
+            echo $USAGE
+            exit 0
+            ;;
+        p)
+            REMOTE_ROOT="$REMOTE_ROOT/$OPTARG"
+            ;;
+        \?)
+            # getopts issues an error message
+            echo $USAGE >&2
+            exit 1
+            ;;
+    esac
+done
+
+# Remove the switches we parsed above.
+shift `expr $OPTIND - 1`
+
+if [ "$1" != "" ]
+then
+    REMOTE_NAME=$1
+fi
+
+# Find root git directory
+START_DIR=`pwd`
+GIT_ROOT=$START_DIR
+while [ "$GIT_ROOT" != "" ]
+do
+    [ -d "$GIT_ROOT/.git" ] && break
+    GIT_ROOT=${GIT_ROOT%/*}
+done
+if [ "$GIT_ROOT" == "" ]
+then
+    echo "This is not a Git repository! Aborting"
+    exit 1
+fi
+REMOTE_DIR="$REMOTE_ROOT/`basename "$GIT_ROOT"`"
+
+# Init remote bare repo
+if [ -d "$REMOTE_DIR" ]
+then
+    echo "Error! $REMOTE_DIR already exists.\nUse -p option to customize the path."
+    exit 1
+fi
+mkdir -p "$REMOTE_DIR"
+cd "$REMOTE_DIR"
+git init --bare
+
+# Setup remote
+cd "$START_DIR"
+git remote add "$REMOTE_NAME" "file://$REMOTE_DIR"
+if [ $? != 0 ]
+then
+    echo "It seems remote $REMOTE_NAME already exists.\nUse name argument to specify a custom remote name."
+    exit 1
+fi
+echo "\nSet up remote repository:"
+git remote -v | grep $REMOTE_NAME
+
+echo "\nPushing the current branch..."
+BRANCH_NAME=$(git symbolic-ref -q HEAD)
+BRANCH_NAME=${BRANCH_NAME##refs/heads/}
+BRANCH_NAME=${BRANCH_NAME:-HEAD}
+git push $REMOTE_NAME $BRANCH_NAME
+
+echo "\nDone."
